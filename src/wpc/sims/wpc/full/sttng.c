@@ -673,14 +673,31 @@ static core_tGameData sttngGameData = {
   {
     FLIP_SW(FLIP_L | FLIP_U) | FLIP_SOL(FLIP_L | FLIP_UR),
     1,0,6,0,0,0,0,
-    sttng_getSol, sttng_handleMech, sttng_getMech, sttng_drawMech,
-    &sttng_lampPos, sttng_SamSolMap
+	
+	sttng_getSol,
+	
+	//sttng_handleMech, // this stops it changing the drop target switch
+	NULL,
+	
+	sttng_getMech,
+	
+	sttng_drawMech,
+
+	&sttng_lampPos,
+	
+	sttng_SamSolMap
   },
-  &sttngSimData,
+
+  //&sttngSimData,
+  NULL,
+
   {     /*Coin    1     2     3     4     5     6     7     8     9    10   Cab.  Cust */
     {0},{ 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x7f, 0x00, 0x00, 0x00, 0x00, 0x00}, /* inverted switches */
-    /*Start    Tilt    SlamTilt    CoinDoor    Shooter */
-    { swStart, swTilt, swSlamTilt, swCoinDoor, swFire},
+    
+	/*Start    Tilt    SlamTilt    CoinDoor    Shooter */
+    	// { swStart, swTilt, swSlamTilt, swCoinDoor, swFire},
+	{},   // allows these to be toggled on the switch matrix by the keys
+
   }
 };
 
