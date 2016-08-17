@@ -53,6 +53,8 @@ static void drawChar(struct mame_bitmap *bitmap, int row, int col, UINT32 bits, 
 static UINT32 core_initDisplaySize(const struct core_dispLayout *layout);
 static VIDEO_UPDATE(core_status);
 
+#define SIM_ENABLED 0
+
 /*---------------------------
 /    Global variables
 /----------------------------*/
@@ -1097,10 +1099,13 @@ void core_updateSw(int flipEn) {
     if (core_gameData->hw.handleMech) core_gameData->hw.handleMech(g_fHandleMechanics);
   }
   /*-- Run simulator --*/
-    if (coreGlobals.simAvail)
-    sim_run(inports, CORE_COREINPORT+(coreData->coreDips+31)/16,
-            (inports[CORE_SIMINPORT] & SIM_SWITCHKEY) == 0,
-            (SIM_BALLS(inports[CORE_SIMINPORT])));
+    if (coreGlobals.simAvail && SIM_ENABLED)
+    {
+      printf("Sim run\n");
+      sim_run(inports, CORE_COREINPORT+(coreData->coreDips+31)/16,
+              (inports[CORE_SIMINPORT] & SIM_SWITCHKEY) == 0,
+              (SIM_BALLS(inports[CORE_SIMINPORT])));
+    }
   { /*-- check changed solenoids --*/
     UINT64 allSol = core_getAllSol();
     UINT64 chgSol = (allSol ^ coreGlobals.lastSol) & vp_getSolMask64();
@@ -1351,6 +1356,9 @@ static VIDEO_UPDATE(core_status) {
 
 /*-- lamp handling --*/
 void core_setLamp(UINT8 *lampMatrix, int col, int row) {
+
+  printf("core_setLamp - %d, %d\n", col, row);
+
   while (col) {
     if (col & 0x01) *lampMatrix |= row;
     col >>= 1;
@@ -1358,6 +1366,9 @@ void core_setLamp(UINT8 *lampMatrix, int col, int row) {
   }
 }
 void core_setLampBlank(UINT8 *lampMatrix, int col, int row) {
+
+  printf("core_setLampBlank - %d, %d\n", col, row);
+
   while (col) {
     if (col & 0x01) *lampMatrix = row;
     col >>= 1;
@@ -1395,6 +1406,9 @@ int core_getSwCol(int colEn) {
 /  Set/reset a switch
 /-----------------------*/
 void core_setSw(int swNo, int value) {
+
+  printf("core_setSw - %d = %d\n", swNo, value);
+
     if (coreData->sw2m) swNo = coreData->sw2m(swNo); else swNo = (swNo/10)*8+(swNo%10-1);
     //fprintf(stderr,"\nPinmame switch %d",swNo);
     coreGlobals.swMatrix[swNo/8] &= ~(1<<(swNo%8)); /* clear the bit first */
@@ -1602,6 +1616,7 @@ static MACHINE_INIT(core) {
 #endif
 
   if (!coreData) { // first time
+    printf("PINMAME MACHINE_INIT\n");
     /*-- init variables --*/
     memset(&coreGlobals, 0, sizeof(coreGlobals));
     memset(&locals, 0, sizeof(locals));
@@ -1673,7 +1688,8 @@ static MACHINE_INIT(core) {
       coreGlobals.soundEn = TRUE;
 
     /*-- init simulator --*/
-    if (g_fHandleKeyboard && core_gameData->simData) {
+    if (g_fHandleKeyboard && core_gameData->simData && SIM_ENABLED) {
+      printf("Initing sim\n");
       int inports[CORE_MAXPORTS];
       int ii;
       for (ii = 0; ii < CORE_COREINPORT+(coreData->coreDips+31)/16; ii++)

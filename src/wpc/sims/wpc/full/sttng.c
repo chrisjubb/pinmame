@@ -676,7 +676,10 @@ static core_tGameData sttngGameData = {
     sttng_getSol, sttng_handleMech, sttng_getMech, sttng_drawMech,
     &sttng_lampPos, sttng_SamSolMap
   },
-  &sttngSimData,
+
+  //&sttngSimData,
+  NULL,
+
   {     /*Coin    1     2     3     4     5     6     7     8     9    10   Cab.  Cust */
     {0},{ 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x7f, 0x00, 0x00, 0x00, 0x00, 0x00}, /* inverted switches */
     /*Start    Tilt    SlamTilt    CoinDoor    Shooter */
@@ -696,6 +699,7 @@ READ_HANDLER(sttng_swRowRead) {
 }
 
 static void init_sttng(void) {
+  printf("STTNG INIT\n");
   core_gameData = &sttngGameData;
   install_mem_read_handler(WPC_CPUNO, WPC_SWROWREAD+WPC_BASE, WPC_SWROWREAD+WPC_BASE,
                          sttng_swRowRead);
