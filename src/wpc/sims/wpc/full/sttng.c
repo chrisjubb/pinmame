@@ -715,8 +715,8 @@ READ_HANDLER(sttng_swRowRead) {
 static void init_sttng(void) {
   printf("STTNG INIT\n");
   core_gameData = &sttngGameData;
-  install_mem_read_handler(WPC_CPUNO, WPC_SWROWREAD+WPC_BASE, WPC_SWROWREAD+WPC_BASE,
-                         sttng_swRowRead);
+  /*install_mem_read_handler(WPC_CPUNO, WPC_SWROWREAD+WPC_BASE, WPC_SWROWREAD+WPC_BASE,
+                         sttng_swRowRead);*/
 }
 
 static int sttng_getSol(int solNo) {

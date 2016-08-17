@@ -1019,7 +1019,8 @@ void core_updateSw(int flipEn) {
   UINT8 swFlip;
   int ii;
 
-  if (g_fHandleKeyboard ) {
+  if (g_fHandleKeyboard )
+  {
   
    for (ii = 0; ii < CORE_COREINPORT+(coreData->coreDips+31)/16; ii++)
       inports[ii] = readinputport(ii); 
@@ -1043,12 +1044,15 @@ void core_updateSw(int flipEn) {
     }
   }
   else
+  {
     swFlip = (coreGlobals.swMatrix[flipSwCol] ^ coreGlobals.invSw[flipSwCol]) & (CORE_SWULFLIPBUTBIT|CORE_SWURFLIPBUTBIT|CORE_SWLLFLIPBUTBIT|CORE_SWLRFLIPBUTBIT);
+  }
 
 #ifdef PROC_SUPPORT
   /*-- Only handle flipper switches if we're not in a real game, otherwise they --*/
   /*-- will get physically activated anyway */
-  if (!coreGlobals.p_rocEn) {
+  if (!coreGlobals.p_rocEn)
+  {
 #endif
 
     /*-- set switches in matrix for non-fliptronic games --*/
@@ -1059,7 +1063,8 @@ void core_updateSw(int flipEn) {
 #endif
 
   /*-- fake solenoids if not CPU controlled --*/
-  if ((flip & FLIP_SOL(FLIP_L)) == 0) {
+  if ((flip & FLIP_SOL(FLIP_L)) == 0)
+  {
     coreGlobals.solenoids2 &= 0xffffff00;
     if (flipEn) {
       if (swFlip & CORE_SWLLFLIPBUTBIT) coreGlobals.solenoids2 |= CORE_LLFLIPSOLBITS;
@@ -1151,16 +1156,22 @@ void core_updateSw(int flipEn) {
 #endif
     if (!col && (((inports[CORE_MANSWINPORT] & CORE_MANSWCOLUMNS) == 0) ||
         ((inports[CORE_MANSWINPORT] & CORE_MANSWROWS) == 0)))
+    {
       lastRow = lastCol = 0;
-    else {
+    }
+    else
+    {
       int bit = 0x0101;
 
-      for (ii = 0; ii < 8; ii++) {
+      for (ii = 0; ii < 8; ii++)
+      {
         if (inports[CORE_MANSWINPORT] & CORE_MANSWCOLUMNS & bit) col = ii+1;
         if (inports[CORE_MANSWINPORT] & CORE_MANSWROWS    & bit) row = ii+1;
         bit <<= 1;
       }
-      if ((col != lastCol) || (row != lastRow)) {
+      if ((col != lastCol) || (row != lastRow))
+      {
+        printf("^ coreGlobals.swMatrix[%d] setting %d\n", col, row);
         coreGlobals.swMatrix[col] ^= (1<<(row-1));
         lastCol = col; lastRow = row;
       }
@@ -1357,7 +1368,7 @@ static VIDEO_UPDATE(core_status) {
 /*-- lamp handling --*/
 void core_setLamp(UINT8 *lampMatrix, int col, int row) {
 
-  printf("core_setLamp - %d, %d\n", col, row);
+  printf("# core_setLamp - %d, %d\n", col, row);
 
   while (col) {
     if (col & 0x01) *lampMatrix |= row;
@@ -1367,7 +1378,7 @@ void core_setLamp(UINT8 *lampMatrix, int col, int row) {
 }
 void core_setLampBlank(UINT8 *lampMatrix, int col, int row) {
 
-  printf("core_setLampBlank - %d, %d\n", col, row);
+  printf("| core_setLampBlank - %d, %d\n", col, row);
 
   while (col) {
     if (col & 0x01) *lampMatrix = row;
@@ -1407,7 +1418,7 @@ int core_getSwCol(int colEn) {
 /-----------------------*/
 void core_setSw(int swNo, int value) {
 
-  printf("core_setSw - %d = %d\n", swNo, value);
+  printf("* core_setSw - %d = %d\n", swNo, value);
 
     if (coreData->sw2m) swNo = coreData->sw2m(swNo); else swNo = (swNo/10)*8+(swNo%10-1);
     //fprintf(stderr,"\nPinmame switch %d",swNo);
@@ -1428,6 +1439,9 @@ void core_setSw(int swNo, int value) {
 /  update active low/high
 /-------------------------*/
 void core_updInvSw(int swNo, int inv) {
+
+  printf("~ core_updInvSw - %d, %d\n", swNo, inv);
+
   int bit;
   if (coreData->sw2m) swNo = coreData->sw2m(swNo); else swNo = (swNo/10)*8+(swNo%10-1);
   bit = (1 << (swNo%8));
