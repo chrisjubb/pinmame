@@ -1363,6 +1363,22 @@ static VIDEO_UPDATE(core_status) {
   if (coreGlobals.simAvail) sim_draw(locals.firstSimRow);
   /*-- draw game specific mechanics --*/
   if (core_gameData->hw.drawMech) core_gameData->hw.drawMech((void *)&bitmap->line[locals.firstSimRow]);
+
+
+  printf("DRAW - ");
+  for (ii = 0; ii < CORE_CUSTLAMPCOL+core_gameData->hw.lampCol; ii++)
+  {
+    int columnBits = coreGlobals.lampMatrix[ii];
+    for (jj = 0; jj < 8; jj++)
+    {
+        int enabled = (columnBits & 0x01);
+        printf("%s", (enabled) ? "1" : "0");
+        columnBits >>= 1;
+    }
+    printf(" ");
+  }
+  printf("\n");
+
 }
 
 /*-- lamp handling --*/
