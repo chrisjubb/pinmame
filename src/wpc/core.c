@@ -148,6 +148,8 @@ int frameCounter = 0;
 int fd = 0;
 char buf[256];
 
+int serialInited = 0;
+
 int makepinball_init()
 {
     char serialport[256];
@@ -196,6 +198,7 @@ int makepinball_init()
     }
     printf("serial port read: %s", buf);
 
+    serialInited = 1;
     usleep(100 * 1000);
 
     return 0;
@@ -203,6 +206,11 @@ int makepinball_init()
 
 int makepinball_sendData()
 {
+    if(serialInited == 0)
+    {
+      return;
+    }
+
     ++frameCounter;
     if((frameCounter % 30) == 0)
     {
@@ -225,6 +233,11 @@ int makepinball_sendData()
 
 void makepinball_waitForInput()
 {
+    if(serialInited == 0)
+    {
+      return;
+    }
+
     serialport_read_until(fd, buf, '\n');
     printf("serial port read: %s",buf);
 }
@@ -1932,7 +1945,7 @@ static MACHINE_INIT(core) {
     int ret = makepinball_init();
     if(ret == -1)
     {
-      return -1;
+      printf("\nCOULD'T INIT SERIAL\n\n");
     }
 
     /*-- masks bit used by flippers --*/
