@@ -39,7 +39,7 @@ int serialport_writebytes(int fd, BYTE* data, int len)
 {
     int n = write(fd, data, len);
     if( n!=len )
-        return -1;
+        return n;
     return 0;
 }
 
@@ -48,10 +48,12 @@ int serialport_read_until(int fd, char* buf, char until)
     char b[1];
     int i=0;
 
-    int triesLeft = 10;
+    int triesLeft = 50;
     do {
         int n = read(fd, b, 1);  // read a char at a time
-        if( n==-1)
+
+        int firstFind = ((i == 0) && (b[0] == until));
+        if(n == -1 ||  firstFind)
         {
             //printf("trying again: %d\n", triesLeft);
             --triesLeft;
@@ -59,11 +61,11 @@ int serialport_read_until(int fd, char* buf, char until)
             {
                 return -1;    // couldn't read
             }
-            usleep(1000);
+            usleep(500);
             continue;
         }
         if( n==0 ) {
-            usleep(1000); // wait and try again
+            usleep(500); // wait and try again
             continue;
         }
         buf[i] = b[0]; i++;
@@ -141,14 +143,14 @@ int serialport_init(const char* serialport, int baud)
 
 // state data
 BYTE data0[BUFFER_SIZE];
-BYTE data1[BUFFER_SIZE];
-int dataIndex = 1;
-int frameCounter = 0;
 
 int fd = 0;
 char buf[256];
 
 int serialInited = 0;
+int didRead = 1;
+
+int frameCounter = 0;
 
 int makepinball_init()
 {
@@ -178,30 +180,35 @@ int makepinball_init()
         printf("Connected using ttyACM0\n");
     }
 
-    for(int i = 0; i < BUFFER_SIZE; ++i)
+    int i = 0;
+    for(i = 0; i < BUFFER_SIZE; ++i)
     {
         data0[i] = (BYTE)0;
-        data1[i] = (BYTE)0;
     }
 
-    data0[6] = 255;
-    data1[6] = 0;
+    data0[6] = 0;
 
     // wait for reset
     usleep(2 * 1000 * 1000);
 
+    buf[0] = 0;
     rc = serialport_read_until(fd, buf, '\n');
     if(rc == -1)
     {
         printf("Initial read returned -1.\n");
         return -1;
     }
-    printf("serial port read: %s", buf);
+    printf("init serial port read: %s", buf);
 
     serialInited = 1;
     usleep(100 * 1000);
 
     return 0;
+}
+
+void makepinball_setData(BYTE* lampMatrix)
+{
+    data0[6] = lampMatrix[0];
 }
 
 int makepinball_sendData()
@@ -212,22 +219,15 @@ int makepinball_sendData()
     }
 
     ++frameCounter;
-    if((frameCounter % 30) == 0)
-    {
-        ++dataIndex;
-    }
 
-    BYTE* outputData = data0;
-    if((dataIndex % 2) == 0)
+    if(didRead)
     {
-        outputData = data1;
-    }
-
-    int rc = serialport_writebytes(fd, outputData, BUFFER_SIZE);
-    if(rc==-1)
-    {
-        printf("RETURN CODE WAS -1\n");
-        return -1;
+        int rc = serialport_writebytes(fd, data0, BUFFER_SIZE);
+        if(rc!=0 || rc==-1)
+        {
+            printf("SEND RETURN CODE WAS %d\n", rc);
+            return -1;
+        }
     }
 
     return 0;
@@ -240,8 +240,17 @@ void makepinball_waitForInput()
       return;
     }
 
-    serialport_read_until(fd, buf, '\n');
-    printf("serial port read: %s",buf);
+    int result = serialport_read_until(fd, buf, '\n');
+    if(result != -1)
+    {
+        printf("serial port read [%d]: %s", frameCounter, buf);
+        didRead = (buf[0] != '\n');
+    }
+    else
+    {
+        printf("error reading\n");
+        didRead = 0;
+    }
 }
 
 
@@ -1474,6 +1483,7 @@ void CLIB_DECL core_textOutf(int x, int y, int color, const char *text, ...) {
 /---------------------------------------------*/
 static VIDEO_UPDATE(core_status) {
 
+  makepinball_setData(coreGlobals.lampMatrix);
   makepinball_sendData();
 
   BMTYPE **lines = (BMTYPE **)bitmap->line;
@@ -1618,7 +1628,7 @@ static VIDEO_UPDATE(core_status) {
   printf("DRAW - ");
   for (ii = 0; ii < CORE_CUSTLAMPCOL+core_gameData->hw.lampCol; ii++)
   {
-    int columnBits = coreGlobals.lampMatrix[ii];
+    UINT8 columnBits = coreGlobals.lampMatrix[ii];
     for (jj = 0; jj < 8; jj++)
     {
         int enabled = (columnBits & 0x01);
