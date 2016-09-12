@@ -208,7 +208,7 @@ int makepinball_sendData()
 {
     if(serialInited == 0)
     {
-      return;
+      return 0;
     }
 
     ++frameCounter;
@@ -229,6 +229,8 @@ int makepinball_sendData()
         printf("RETURN CODE WAS -1\n");
         return -1;
     }
+
+    return 0;
 }
 
 void makepinball_waitForInput()
