@@ -1,4 +1,235 @@
 /***********************************************/
+/* makepinball.com                             */
+/***********************************************/
+
+#define BUFFER_SIZE 56
+
+typedef unsigned char BYTE;
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <getopt.h>
+
+int serialport_writebyte( int fd, uint8_t b)
+{
+    int n = write(fd,&b,1);
+    if( n!=1)
+        return -1;
+    return 0;
+}
+
+int serialport_write(int fd, const char* str)
+{
+    int len = strlen(str);
+    //printf("writing - %s\n", str);
+    int n = write(fd, str, len);
+    if( n!=len )
+        return -1;
+    return 0;
+}
+
+int serialport_writebytes(int fd, BYTE* data, int len)
+{
+    int n = write(fd, data, len);
+    if( n!=len )
+        return -1;
+    return 0;
+}
+
+int serialport_read_until(int fd, char* buf, char until)
+{
+    char b[1];
+    int i=0;
+
+    int triesLeft = 10;
+    do {
+        int n = read(fd, b, 1);  // read a char at a time
+        if( n==-1)
+        {
+            //printf("trying again: %d\n", triesLeft);
+            --triesLeft;
+            if(triesLeft == 0)
+            {
+                return -1;    // couldn't read
+            }
+            usleep(1000);
+            continue;
+        }
+        if( n==0 ) {
+            usleep(1000); // wait and try again
+            continue;
+        }
+        buf[i] = b[0]; i++;
+    } while( b[0] != until );
+
+    buf[i] = 0;  // null terminate the string
+    return 0;
+}
+
+// takes the string name of the serial port (e.g. "/dev/tty.usbserial","COM1")
+// and a baud rate (bps) and connects to that port at that speed and 8N1.
+// opens the port in fully raw mode so you can send binary data.
+// returns valid fd, or -1 on error
+int serialport_init(const char* serialport, int baud)
+{
+    struct termios toptions;
+    int fd;
+
+    //fprintf(stderr,"init_serialport: opening port %s @ %d bps\n",
+    //        serialport,baud);
+
+    fd = open(serialport, O_RDWR | O_NOCTTY | O_NDELAY);
+    if (fd == -1)  {
+        perror("init_serialport: Unable to open port ");
+        return -1;
+    }
+
+    if (tcgetattr(fd, &toptions) < 0) {
+        perror("init_serialport: Couldn't get term attributes");
+        return -1;
+    }
+    speed_t brate = baud; // let you override switch below if needed
+    switch(baud) {
+    case 4800:   brate=B4800;   break;
+    case 9600:   brate=B9600;   break;
+#ifdef B14400
+    case 14400:  brate=B14400;  break;
+#endif
+    case 19200:  brate=B19200;  break;
+#ifdef B28800
+    case 28800:  brate=B28800;  break;
+#endif
+    case 38400:  brate=B38400;  break;
+    case 57600:  brate=B57600;  break;
+    case 115200: brate=B115200; break;
+    }
+    cfsetispeed(&toptions, brate);
+    cfsetospeed(&toptions, brate);
+
+    // 8N1
+    toptions.c_cflag &= ~PARENB;
+    toptions.c_cflag &= ~CSTOPB;
+    toptions.c_cflag &= ~CSIZE;
+    toptions.c_cflag |= CS8;
+    // no flow control
+    toptions.c_cflag &= ~CRTSCTS;
+
+    toptions.c_cflag |= CREAD | CLOCAL;  // turn on READ & ignore ctrl lines
+    toptions.c_iflag &= ~(IXON | IXOFF | IXANY); // turn off s/w flow ctrl
+
+    toptions.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG); // make raw
+    toptions.c_oflag &= ~OPOST; // make raw
+
+    // see: http://unixwiz.net/techtips/termios-vmin-vtime.html
+    toptions.c_cc[VMIN]  = 0;
+    toptions.c_cc[VTIME] = 20;
+
+    if( tcsetattr(fd, TCSANOW, &toptions) < 0) {
+        perror("init_serialport: Couldn't set term attributes");
+        return -1;
+    }
+
+    return fd;
+}
+
+// state data
+BYTE data0[BUFFER_SIZE];
+BYTE data1[BUFFER_SIZE];
+int dataIndex = 1;
+int frameCounter = 0;
+
+int makepinball_init()
+{
+    int fd = 0;
+    char serialport[256];
+    int baudrate = B115200;
+    char buf[256];
+    int rc,n;
+
+    usleep(200 * 1000);
+
+    fd = serialport_init("/dev/ttyACM0", baudrate);
+    if(fd==-1)
+    {
+        printf("Couldn't open ttyACM0 - trying cu.usbmodem1411\n");
+        fd = serialport_init("/dev/cu.usbmodem1411", baudrate);
+        if(fd==-1)
+        {
+            printf("Couldn't open cu.usbmodem1411 either\n");
+            return -1;
+        }
+        else
+        {
+            printf("Connected using cu.usbmodem1411\n");
+        }
+    }
+    else
+    {
+        printf("Connected using ttyACM0\n");
+    }
+
+    for(int i = 0; i < BUFFER_SIZE; ++i)
+    {
+        data0[i] = (BYTE)0;
+        data1[i] = (BYTE)0;
+    }
+
+    data0[6] = 255;
+    data1[6] = 0;
+
+    // wait for reset
+    usleep(2 * 1000 * 1000);
+
+    rc = serialport_read_until(fd, buf, '\n');
+    if(rc == -1)
+    {
+        printf("Initial read returned -1.\n");
+        return -1;
+    }
+    printf("read: %s", buf);
+
+    usleep(100 * 1000);
+
+    return 0;
+}
+
+int makepinball_sendData()
+{
+    ++i;
+    if((i % 8) == 0)
+    {
+        ++dataIndex;
+    }
+
+    BYTE* outputData = data0;
+    if((dataIndex % 2) == 0)
+    {
+        outputData = data1;
+    }
+
+    rc = serialport_writebytes(fd, outputData, BUFFER_SIZE);
+    if(rc==-1)
+    {
+        printf("RETURN CODE WAS -1\n");
+        return -1;
+    }
+}
+
+void makepinball_waitForInput()
+{
+  serialport_read_until(fd, buf, '\n');
+  printf("read: %s",buf);
+}
+
+
+/***********************************************/
 /* PINMAME - Interface function (Input/Output) */
 /***********************************************/
 #include <stdarg.h>
@@ -643,7 +874,7 @@ static PALETTE_INIT(core) {
   tmpPalette[COL_DMDON][2]    = bStart;
 
   /*-- If the "colorize" option is set, use the individual option colors for the shades --*/
-  if (pmoptions.dmd_colorize) { 
+  if (pmoptions.dmd_colorize) {
     if (pmoptions.dmd_red0 > 0 || pmoptions.dmd_green0 > 0 || pmoptions.dmd_blue0 > 0) {
       tmpPalette[COL_DMDOFF][0]   = pmoptions.dmd_red0;
       tmpPalette[COL_DMDOFF][1]   = pmoptions.dmd_green0;
@@ -660,7 +891,7 @@ static PALETTE_INIT(core) {
       tmpPalette[COL_DMD66][2]    = pmoptions.dmd_blue66;
     }
   }
-  
+
   /*-- segment display antialias colors --*/
   tmpPalette[COL_SEGAAON1][0] = rStart * 72 / 100;
   tmpPalette[COL_SEGAAON1][1] = gStart * 72 / 100;
@@ -752,7 +983,7 @@ void video_update_core_dmd(struct mame_bitmap *bitmap, const struct rectangle *c
 
   static const int levelgts3[16] = {0/*5*/, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100}; // GTS3 and AlvinG brightness seems okay
   static const int levelsam[16]  = {0/*5*/, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100}; // SAM brightness seems okay
-  
+
   const int * const level = (core_gameData->gen == GEN_SAM) ? levelsam : levelgts3;
 
   const UINT8 raws[5] = {perc0,perc1,perc2,perc3,0xFF};
@@ -940,7 +1171,7 @@ static void updateDisplay(struct mame_bitmap *bitmap, const struct rectangle *cl
           if (!pmoptions.dmd_only || !(layout->fptr || layout->lptr)) {
 
             drawChar(bitmap,  top, left, tmpSeg, tmpType, coreGlobals.segDim[*pos] > 15 ? 15 : coreGlobals.segDim[*pos]);
-#ifdef PROC_SUPPORT 
+#ifdef PROC_SUPPORT
 					if (coreGlobals.p_rocEn) {
                                                 if ((core_gameData->gen & (GEN_WPCALPHA_1 | GEN_WPCALPHA_2 | GEN_ALLS11)) &&
 						    (!pmoptions.alpha_on_dmd)) {
@@ -953,7 +1184,7 @@ static void updateDisplay(struct mame_bitmap *bitmap, const struct rectangle *cl
                                                             else proc_top[8] = tmpSeg;
                                                         break;
                                                         default: proc_bottom[left/char_width + (doubleAlpha == 0)] = tmpSeg; break;
-							} 
+							}
 						}
 					}
 #endif
@@ -972,7 +1203,7 @@ static void updateDisplay(struct mame_bitmap *bitmap, const struct rectangle *cl
 
 				}
 			}
-#endif 
+#endif
     }
   }
 
@@ -1021,10 +1252,10 @@ void core_updateSw(int flipEn) {
 
   if (g_fHandleKeyboard )
   {
-  
+
    for (ii = 0; ii < CORE_COREINPORT+(coreData->coreDips+31)/16; ii++)
-      inports[ii] = readinputport(ii); 
-      
+      inports[ii] = readinputport(ii);
+
 
     /*-- buttons --*/
     swFlip = 0;
@@ -1145,7 +1376,7 @@ void core_updateSw(int flipEn) {
   if (g_fHandleKeyboard &&
       (!coreGlobals.simAvail || inports[CORE_SIMINPORT] & SIM_SWITCHKEY)) {
     /*-- simulator keys disabled, use row+column keys --*/
-      
+
     static int lastRow = 0, lastCol = 0;
     int row = 0, col = 0;
 #ifdef MAME_DEBUG
@@ -1226,6 +1457,9 @@ void CLIB_DECL core_textOutf(int x, int y, int color, const char *text, ...) {
 / Lamps, Switches, Solenoids, Diagnostic LEDs
 /---------------------------------------------*/
 static VIDEO_UPDATE(core_status) {
+
+  makepinball_sendData();
+
   BMTYPE **lines = (BMTYPE **)bitmap->line;
   int startRow = 0, nextCol = 0, thisCol = 0;
   int ii, jj, bits;
@@ -1379,12 +1613,14 @@ static VIDEO_UPDATE(core_status) {
   }
   printf("\n");
 
+  makepinball_waitForInput();
+
 }
 
 /*-- lamp handling --*/
 void core_setLamp(UINT8 *lampMatrix, int col, int row) {
 
-  printf("# core_setLamp - %d, %d\n", col, row);
+  //printf("# core_setLamp - %d, %d\n", col, row);
 
   while (col) {
     if (col & 0x01) *lampMatrix |= row;
@@ -1444,7 +1680,7 @@ void core_setSw(int swNo, int value) {
 		coreGlobals.swMatrix[swNo/8] |=  ((value ? 0xff : 0) ^ 0) & (1<<(swNo%8));
 	} else {
 #endif
-            
+
   coreGlobals.swMatrix[swNo/8] |=  ((value ? 0xff : 0) ^ coreGlobals.invSw[swNo/8]) & (1<<(swNo%8));
 #ifdef PROC_SUPPORT
 	}
@@ -1616,8 +1852,8 @@ static void drawChar(struct mame_bitmap *bitmap, int row, int col, UINT32 bits, 
                                                 break;
                                         default:
                                             break;
-						
-                                        
+
+
 					}
 				}
 			}
@@ -1669,7 +1905,7 @@ static MACHINE_INIT(core) {
 #ifdef PROC_SUPPORT
 		/*-- P-ROC operation requires a YAML.  Disable P-ROC operation
 		 * if no YAML is specified. --*/
-                 
+
 		coreGlobals.p_rocEn = strcmp(yaml_filename, "None") != 0;
 		if (coreGlobals.p_rocEn) {
 			/*-- Finish P-ROC initialization now that the sim is active. --*/
@@ -1691,6 +1927,12 @@ static MACHINE_INIT(core) {
                        }
 		}
 #endif
+
+    int ret = makepinball_init();
+    if(ret == -1)
+    {
+      return -1;
+    }
 
     /*-- masks bit used by flippers --*/
     {
