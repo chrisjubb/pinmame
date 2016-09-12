@@ -145,12 +145,13 @@ BYTE data1[BUFFER_SIZE];
 int dataIndex = 1;
 int frameCounter = 0;
 
+int fd = 0;
+char buf[256];
+
 int makepinball_init()
 {
-    int fd = 0;
     char serialport[256];
     int baudrate = B115200;
-    char buf[256];
     int rc,n;
 
     usleep(200 * 1000);
@@ -193,7 +194,7 @@ int makepinball_init()
         printf("Initial read returned -1.\n");
         return -1;
     }
-    printf("read: %s", buf);
+    printf("serial port read: %s", buf);
 
     usleep(100 * 1000);
 
@@ -202,8 +203,8 @@ int makepinball_init()
 
 int makepinball_sendData()
 {
-    ++i;
-    if((i % 8) == 0)
+    ++frameCounter;
+    if((frameCounter % 30) == 0)
     {
         ++dataIndex;
     }
@@ -214,7 +215,7 @@ int makepinball_sendData()
         outputData = data1;
     }
 
-    rc = serialport_writebytes(fd, outputData, BUFFER_SIZE);
+    int rc = serialport_writebytes(fd, outputData, BUFFER_SIZE);
     if(rc==-1)
     {
         printf("RETURN CODE WAS -1\n");
@@ -224,8 +225,8 @@ int makepinball_sendData()
 
 void makepinball_waitForInput()
 {
-  serialport_read_until(fd, buf, '\n');
-  printf("read: %s",buf);
+    serialport_read_until(fd, buf, '\n');
+    printf("serial port read: %s",buf);
 }
 
 
